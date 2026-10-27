@@ -181,6 +181,7 @@
 <script>
   const data = window.RATINGS;
   const teams = new Map(data.teams.map(t => [t.name, t]));
+  const isRegression = data.model === "regression";
   const state = { team1: null, team2: null, loc: 0 };  // loc: 1 = team 1 home, -1 = team 2 home, 0 = neutral
 
   // dark background logos first, regular ones if a team doesn't have one
@@ -239,7 +240,7 @@
 
     name.textContent = team ? team.name : "Pick a team";
     name.classList.toggle("empty", !team);
-    card.querySelector(".rating").textContent = team ? "Power rating " + signed(team.rating) : "";
+    card.querySelector(".rating").textContent = team ? (isRegression ? "Model score " : "Power rating ") + signed(team.rating) : "";
 
     if (!team || !team.espn_id) {
       logo.classList.remove("has-logo");
@@ -284,12 +285,20 @@
       main.textContent = "Pick two different teams";
       main.classList.add("error");
     } else {
-      // same formula as the desktop app: rating 1 - rating 2 + home field
-      const spread = t1.rating - t2.rating + state.loc * data.home_field;
-      if (Math.abs(spread) < 0.05) main.textContent = "Toss-up";
-      else main.textContent = (spread > 0 ? t1.name : t2.name) + " by " + Math.abs(spread).toFixed(1);
-      detail.textContent = "Ratings: " + t1.name + " " + signed(t1.rating) + "  ·  "
-        + t2.name + " " + signed(t2.rating) + "  ·  home field " + data.home_field.toFixed(1) + " pts";
+      // rating 1 - rating 2 + home field, for both the regression and the plain power ratings
+      const spreadText = (a, b, hfa) => {
+        const spread = a - b + state.loc * hfa;
+        if (Math.abs(spread) < 0.05) return "Toss-up";
+        return (spread > 0 ? t1.name : t2.name) + " by " + Math.abs(spread).toFixed(1);
+      };
+      main.textContent = spreadText(t1.rating, t2.rating, data.home_field);
+      if (isRegression) {
+        detail.textContent = "Power rating alone: " + spreadText(t1.srs, t2.srs, data.srs_home_field)
+          + "  ·  home field " + data.home_field.toFixed(1) + " pts";
+      } else {
+        detail.textContent = "Ratings: " + t1.name + " " + signed(t1.rating) + "  ·  "
+          + t2.name + " " + signed(t2.rating) + "  ·  home field " + data.home_field.toFixed(1) + " pts";
+      }
     }
 
     // keep the matchup in the address so it can be bookmarked or shared
@@ -311,8 +320,10 @@
   if (["1", "-1"].includes(params.get("loc"))) state.loc = Number(params.get("loc"));
 
   const updated = new Date(data.updated + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  document.querySelector(".result .label").textContent = isRegression ? "MODEL SPREAD" : "POWER RATING SPREAD";
   document.querySelector("footer").textContent =
-    "Ratings updated " + updated + "  ·  " + data.games + " games  ·  home field " + data.home_field.toFixed(1) + " pts";
+    "Ratings updated " + updated + "  ·  " + data.games + " games  ·  "
+    + (isRegression ? "regression model" : "power ratings");
 
   makePicker("team1");
   makePicker("team2");
