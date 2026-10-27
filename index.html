@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#242424">
+<title>CFB Spread Model</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #242424;
+    --card: #2b2b2b;
+    --field: #343638;
+    --border: #565b5e;
+    --text: #dce4ee;
+    --muted: #9b9b9b;
+    --accent: #1f6aa5;
+    --error: #e05252;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, Roboto, "Segoe UI", sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .app {
+    max-width: 960px;
+    margin: 0 auto;
+    padding: calc(14px + env(safe-area-inset-top)) 16px calc(20px + env(safe-area-inset-bottom));
+  }
+  h1 { font-size: 24px; text-align: center; margin: 4px 0 14px; }
+
+  .matchup { display: grid; gap: 8px; }
+  .vs { text-align: center; color: #777; font-weight: 700; font-size: 15px; }
+
+  .team {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 14px;
+    display: grid;
+    grid-template-columns: 72px 1fr;
+    gap: 2px 14px;
+    align-items: center;
+  }
+  .label { grid-column: 1 / -1; font-size: 12px; font-weight: 700; letter-spacing: .08em; color: var(--muted); margin-bottom: 6px; }
+  .logo { width: 72px; height: 72px; grid-row: span 2; border-radius: 50%; display: grid; place-items: center; }
+  .logo img { width: 100%; height: 100%; object-fit: contain; }
+  .logo:not(.has-logo) { border: 3px solid #555; }
+  .logo:not(.has-logo) img { display: none; }
+  .name { font-size: 20px; font-weight: 700; align-self: end; }
+  .name.empty { color: var(--muted); font-weight: 600; }
+  .rating { font-size: 14px; color: var(--muted); align-self: start; min-height: 1.2em; }
+
+  .search { grid-column: 1 / -1; margin-top: 10px; }
+  .search input {
+    width: 100%;
+    height: 44px;
+    border-radius: 10px;
+    border: 2px solid var(--border);
+    background: var(--field);
+    color: var(--text);
+    font: inherit;
+    font-size: 16px;
+    padding: 0 12px;
+    outline: none;
+  }
+  .search input:focus { border-color: var(--accent); }
+  .search ul {
+    display: none;
+    list-style: none;
+    margin: 6px 0 0;
+    padding: 4px;
+    max-height: 260px;
+    overflow-y: auto;
+    background: var(--field);
+    border-radius: 10px;
+  }
+  .team.open ul { display: block; }
+  .search li { padding: 11px 10px; border-radius: 8px; font-size: 16px; cursor: pointer; }
+  .search li:hover, .search li:active { background: var(--accent); color: #fff; }
+  .search li.none { color: var(--muted); cursor: default; background: none; }
+
+  .location {
+    display: flex;
+    background: #4a4d50;
+    border-radius: 10px;
+    padding: 3px;
+    margin: 16px auto 14px;
+    max-width: 540px;
+  }
+  .location button {
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--text);
+    font: inherit;
+    font-size: 14px;
+    padding: 10px 6px;
+    border-radius: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .location button.on { background: var(--accent); color: #fff; }
+
+  .result { background: var(--card); border-radius: 16px; padding: 16px; text-align: center; }
+  .result .label { margin-bottom: 4px; }
+  .result .main { font-size: 30px; font-weight: 700; line-height: 1.2; }
+  .result .main.muted { color: var(--muted); font-size: 22px; }
+  .result .main.error { color: var(--error); font-size: 22px; }
+  .result .detail { color: var(--muted); font-size: 13px; margin-top: 6px; line-height: 1.5; }
+
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 14px; }
+
+  /* unfolded Fold / tablets: side-by-side like the desktop app */
+  @media (min-width: 600px) {
+    h1 { font-size: 30px; margin-bottom: 18px; }
+    .matchup { grid-template-columns: 1fr auto 1fr; align-items: stretch; gap: 14px; }
+    .vs { align-self: center; font-size: 22px; }
+    .team { grid-template-columns: 1fr; justify-items: center; text-align: center; align-content: start; }
+    .logo { width: 120px; height: 120px; grid-row: auto; margin: 4px 0 8px; }
+    .name { font-size: 22px; }
+    .search { width: 100%; text-align: left; }
+    .result .main { font-size: 34px; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>CFB Spread Model</h1>
+
+  <div class="matchup">
+    <section class="team" id="team1">
+      <div class="label">TEAM 1</div>
+      <div class="logo"><img alt=""></div>
+      <div class="name empty">Pick a team</div>
+      <div class="rating"></div>
+      <div class="search">
+        <input type="search" placeholder="Search teams..." autocomplete="off" enterkeyhint="done">
+        <ul></ul>
+      </div>
+    </section>
+
+    <div class="vs">vs</div>
+
+    <section class="team" id="team2">
+      <div class="label">TEAM 2</div>
+      <div class="logo"><img alt=""></div>
+      <div class="name empty">Pick a team</div>
+      <div class="rating"></div>
+      <div class="search">
+        <input type="search" placeholder="Search teams..." autocomplete="off" enterkeyhint="done">
+        <ul></ul>
+      </div>
+    </section>
+  </div>
+
+  <div class="location">
+    <button data-loc="1">At Team 1</button>
+    <button data-loc="0" class="on">Neutral</button>
+    <button data-loc="-1">At Team 2</button>
+  </div>
+
+  <section class="result">
+    <div class="label">POWER RATING SPREAD</div>
+    <div class="main muted">Pick two teams</div>
+    <div class="detail"></div>
+  </section>
+
+  <footer></footer>
+</div>
+
+<script src="ratings.js"></script>
+<script>
+  const data = window.RATINGS;
+  const teams = new Map(data.teams.map(t => [t.name, t]));
+  const state = { team1: null, team2: null, loc: 0 };  // loc: 1 = team 1 home, -1 = team 2 home, 0 = neutral
+
+  // dark background logos first, regular ones if a team doesn't have one
+  const logoUrls = id => [
+    "https://a.espncdn.com/i/teamlogos/ncaa/500-dark/" + id + ".png",
+    "https://a.espncdn.com/i/teamlogos/ncaa/500/" + id + ".png",
+  ];
+
+  const signed = x => (x >= 0 ? "+" : "−") + Math.abs(x).toFixed(1);
+
+  function makePicker(key) {
+    const card = document.getElementById(key);
+    const input = card.querySelector("input");
+    const list = card.querySelector("ul");
+    let matches = [];
+
+    function render() {
+      const text = input.value.trim().toLowerCase();
+      matches = data.teams.filter(t => t.name.toLowerCase().includes(text));
+      if (!matches.length) {
+        list.innerHTML = '<li class="none">No teams found</li>';
+        return;
+      }
+      list.replaceChildren(...matches.map(t => {
+        const li = document.createElement("li");
+        li.textContent = t.name;
+        li.addEventListener("mousedown", e => e.preventDefault());  // keep the search box focused while tapping
+        li.addEventListener("click", () => choose(t.name));
+        return li;
+      }));
+    }
+
+    function choose(name) {
+      state[key] = name;
+      input.value = "";
+      card.classList.remove("open");
+      input.blur();
+      update();
+    }
+
+    input.addEventListener("focus", () => { card.classList.add("open"); render(); });
+    input.addEventListener("input", render);
+    input.addEventListener("blur", () => setTimeout(() => card.classList.remove("open"), 150));
+    input.addEventListener("keydown", e => {
+      if (e.key === "Enter" && matches.length) choose(matches[0].name);
+      if (e.key === "Escape") input.blur();
+    });
+  }
+
+  function showTeam(key) {
+    const card = document.getElementById(key);
+    const team = teams.get(state[key]);
+    const logo = card.querySelector(".logo");
+    const img = logo.querySelector("img");
+    const name = card.querySelector(".name");
+
+    name.textContent = team ? team.name : "Pick a team";
+    name.classList.toggle("empty", !team);
+    card.querySelector(".rating").textContent = team ? "Power rating " + signed(team.rating) : "";
+
+    if (!team || !team.espn_id) {
+      logo.classList.remove("has-logo");
+      img.removeAttribute("src");
+      return;
+    }
+    if (img.dataset.team === team.name) return;
+
+    const urls = logoUrls(team.espn_id);
+    let attempt = 0;
+    img.dataset.team = team.name;
+    img.onload = () => logo.classList.add("has-logo");
+    img.onerror = () => {
+      attempt += 1;
+      if (attempt < urls.length) img.src = urls[attempt];
+      else logo.classList.remove("has-logo");
+    };
+    logo.classList.remove("has-logo");
+    img.src = urls[0];
+  }
+
+  function update() {
+    showTeam("team1");
+    showTeam("team2");
+
+    const buttons = document.querySelectorAll(".location button");
+    buttons[0].textContent = "At " + (state.team1 || "Team 1");
+    buttons[2].textContent = "At " + (state.team2 || "Team 2");
+    buttons.forEach(b => b.classList.toggle("on", Number(b.dataset.loc) === state.loc));
+
+    const main = document.querySelector(".result .main");
+    const detail = document.querySelector(".result .detail");
+    const t1 = teams.get(state.team1);
+    const t2 = teams.get(state.team2);
+    main.className = "main";
+    detail.textContent = "";
+
+    if (!t1 || !t2) {
+      main.textContent = "Pick two teams";
+      main.classList.add("muted");
+    } else if (t1 === t2) {
+      main.textContent = "Pick two different teams";
+      main.classList.add("error");
+    } else {
+      // same formula as the desktop app: rating 1 - rating 2 + home field
+      const spread = t1.rating - t2.rating + state.loc * data.home_field;
+      if (Math.abs(spread) < 0.05) main.textContent = "Toss-up";
+      else main.textContent = (spread > 0 ? t1.name : t2.name) + " by " + Math.abs(spread).toFixed(1);
+      detail.textContent = "Ratings: " + t1.name + " " + signed(t1.rating) + "  ·  "
+        + t2.name + " " + signed(t2.rating) + "  ·  home field " + data.home_field.toFixed(1) + " pts";
+    }
+
+    // keep the matchup in the address so it can be bookmarked or shared
+    const params = new URLSearchParams();
+    if (state.team1) params.set("t1", state.team1);
+    if (state.team2) params.set("t2", state.team2);
+    if (state.loc) params.set("loc", state.loc);
+    const query = params.toString();
+    history.replaceState(null, "", query ? "?" + query : location.pathname);
+  }
+
+  document.querySelectorAll(".location button").forEach(b => {
+    b.addEventListener("click", () => { state.loc = Number(b.dataset.loc); update(); });
+  });
+
+  const params = new URLSearchParams(location.search);
+  if (teams.has(params.get("t1"))) state.team1 = params.get("t1");
+  if (teams.has(params.get("t2"))) state.team2 = params.get("t2");
+  if (["1", "-1"].includes(params.get("loc"))) state.loc = Number(params.get("loc"));
+
+  const updated = new Date(data.updated + "T12:00:00").toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+  document.querySelector("footer").textContent =
+    "Ratings updated " + updated + "  ·  " + data.games + " games  ·  home field " + data.home_field.toFixed(1) + " pts";
+
+  makePicker("team1");
+  makePicker("team2");
+  update();
+
+  if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js");
+</script>
+</body>
+</html>
